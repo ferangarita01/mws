@@ -1,0 +1,38 @@
+{
+  "name": "firebase-migration-tools",
+  "version": "1.0.0",
+  "description": "Herramientas para migrar proyectos Firebase entre cuentas de Google",
+  "main": "scripts/migration/firebase-migrate.sh",
+  "scripts": {
+    "migrate": "bash scripts/migration/firebase-migrate.sh",
+    "update-config": "node scripts/migration/config-migrator.js",
+    "validate": "node scripts/migration/migration-validator.js",
+    "help": "echo 'Comandos disponibles:\n  npm run migrate - Ejecutar migración completa\n  npm run update-config update <directory> <projectId> - Actualizar configuración\n  npm run validate <projectId> - Validar migración'"
+  },
+  "keywords": [
+    "firebase",
+    "migration",
+    "google-cloud",
+    "firestore",
+    "authentication",
+    "storage"
+  ],
+  "author": "Firebase Migration Tools",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "peerDependencies": {
+    "firebase-tools": ">=11.0.0"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ferangarita01/mws.git"
+  },
+  "bin": {
+    "firebase-migrate": "./scripts/migration/firebase-migrate.sh",
+    "firebase-config-update": "./scripts/migration/config-migrator.js",
+    "firebase-validate": "./scripts/migration/migration-validator.js"
+  }
+}
