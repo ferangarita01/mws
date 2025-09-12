@@ -1,3 +1,4 @@
+
 # MuWise
 
 MuWise es una aplicación web para crear, gestionar y firmar acuerdos musicales de forma segura y profesional. Combina Next.js (App Router), TypeScript y Firebase (Auth, Firestore, Storage, App Hosting). Integra IA con Genkit + Google AI para validar información de contratos y detectar posibles conflictos de derechos. Es extensible para enriquecer contratos con metadatos públicos de la API de Spotify.
@@ -11,7 +12,8 @@ MuWise es una aplicación web para crear, gestionar y firmar acuerdos musicales 
 - [Características clave](#características-clave)
 - [Tecnologías](#tecnologías)
 - [Arquitectura y estructura del proyecto](#arquitectura-y-estructura-del-proyecto)
-- [🔥 Inicialización del SDK de Firebase Admin](#-inicialización-del-sdk-de-firebase-admin)
+- [Solución de Problemas (Troubleshooting)](#solución-de-problemas-troubleshooting)
+- [Flujo de firma electrónica](#flujo-de-firma-electrónica)
 - [Variables de entorno](#variables-de-entorno)
 - [Requisitos y puesta en marcha](#requisitos-y-puesta-en-marcha)
 - [Despliegue](#despliegue)
@@ -86,7 +88,7 @@ ferangarita01-muwise/
    ├─ lib/
    │  ├─ firebase-client.ts
    │  ├─ firebase-server.ts # Configuración del SDK de Admin
-   │  └─ signing-links.ts   # Genera/verifica tokens JWT para firmas
+   │  ├─ signing-links.ts   # Genera/verifica tokens JWT para firmas
    │  └─ stripe.ts          # Lógica de cliente de Stripe
    ├─ services/             # Lógica de negocio (Agreement, User, Email)
    └─ types/                # Modelos y tipos (Agreement, User, etc.)
@@ -94,40 +96,71 @@ ferangarita01-muwise/
 
 ---
 
-## 🔥 Inicialización del SDK de Firebase Admin
+## Solución de Problemas (Troubleshooting)
 
-- **Local Dev**  
-  Usamos `.env.local` con:
-  - `FIREBASE_PROJECT_ID`  
-  - `FIREBASE_CLIENT_EMAIL`  
-  - `FIREBASE_PRIVATE_KEY` (formateada con `\n`)
+### Error: "Failed to parse private key: Error: Unparsed DER bytes remain after ASN.1 parsing."
 
-- **Production (Firebase App Hosting / Cloud Run)**  
-  - **NO** configuramos secretos `FIREBASE_*` en `apphosting.yaml`.
-  - Usamos **Application Default Credentials (ADC)** automáticamente.  
+Este es el error más crítico y ocurre cuando la `private_key` de la cuenta de servicio de Firebase no se formatea correctamente en las variables de entorno.
 
-➝ Esto evita errores de inicialización y sigue las buenas prácticas de Google Cloud.
+**Causa Raíz**: Las variables de entorno (tanto en `.env.local` como en los secretos de producción) no manejan bien los saltos de línea (`\n`) dentro de la clave privada. Al leer la variable, la clave se deforma y el SDK de Admin no puede parsearla.
+
+**Solución Definitiva (Implementada)**:
+La solución adoptada es separar las partes de la cuenta de servicio en variables de entorno individuales y reconstruir el objeto de credencial en `firebase-server.ts`.
+
+1.  **Variables de Entorno Separadas**: En lugar de un gran JSON en una variable, usamos:
+    *   `FIREBASE_PROJECT_ID`
+    *   `FIREBASE_CLIENT_EMAIL`
+    *   `FIREBASE_PRIVATE_KEY` (esta contendrá la clave con `\n` escapados como `\\n`)
+
+2.  **Reconstrucción en el Servidor (`firebase-server.ts`)**: El código del servidor lee estas variables y, crucialmente, reemplaza los `\\n` por `\n` en la clave privada antes de pasársela al SDK de Admin.
+    ```typescript
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+      }),
+      // ...
+    });
+    ```
+Este método es más limpio, seguro y evita por completo los errores de formato de la clave privada.
+
+---
+
+## Flujo de firma electrónica
+
+1. Autenticación del usuario (Firebase Auth).
+2. Acceso al acuerdo y selección del firmante.
+3. Dibujo de la firma y aceptación de términos legales visibles.
+4. Aplicación de la firma:
+   - Se guarda la imagen de la firma (Data URL) y se registra `signedAt`.
+   - Se marca el firmante como `signed`; se actualiza el estado del acuerdo en Firestore.
+5. Enlaces seguros:
+   - Se generan con JWT, ligados a `agreementId` + `signerId`, con expiración configurable.
+   - Verificación del token en el endpoint de firma.
+6. Notificación:
+   - Envío de correo con el enlace de firma.
 
 ---
 
 ## Variables de entorno
 
-Crea un archivo `.env.local` en la raíz para desarrollo. En producción, estas deben ser configuradas como secretos en Google Secret Manager y referenciadas en `apphosting.yaml`.
+Crea un archivo `.env.local` en la raíz para desarrollo. En producción, estas deben ser configuradas en `apphosting.yaml` o como secretos en Google Secret Manager.
 
-| Variable                             | Entorno Local                      | Entorno Producción (App Hosting)                                           | Descripción                                                                |
-| ------------------------------------ | ---------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_FIREBASE_*`             | **Requerido** (varias)             | **Requerido** (varias)                                                     | Configuración del SDK de cliente de Firebase.                                  |
-| `FIREBASE_PROJECT_ID`                | **Requerido**                      | No necesario (usa ADC)                                                     | ID del proyecto de Firebase (para servidor local).                         |
-| `FIREBASE_CLIENT_EMAIL`              | **Requerido**                      | No necesario (usa ADC)                                                     | Email de la cuenta de servicio del Admin SDK (para servidor local).        |
-| `FIREBASE_PRIVATE_KEY`               | **Requerido**                      | No necesario (usa ADC)                                                     | Clave privada de la cuenta de servicio del Admin SDK (para servidor local).|
-| `FIREBASE_STORAGE_BUCKET`            | **Requerido**                      | **Requerido**                                                              | Bucket de Cloud Storage.                                                   |
-| `NEXT_PUBLIC_BASE_URL`               | **Requerido** (`http://localhost:3000`) | **Requerido** (URL pública)                                                | URL pública de la app (para enlaces, etc.).                                |
-| `JWT_SECRET`                         | **Requerido**                      | **Requerido** (como secreto)                                               | Clave para firmar tokens de enlaces de firma.                              |
-| `RESEND_API_KEY`                     | **Requerido**                      | **Requerido** (como secreto)                                               | Clave de API de Resend para enviar correos.                                 |
-| `EMAIL_FROM`                         | **Requerido**                      | **Requerido**                                                              | Remitente de correo por defecto.                                           |
-| `STRIPE_SECRET_KEY`                  | **Requerido**                      | **Requerido** (como secreto)                                               | Clave secreta de Stripe.                                                   |
-| `STRIPE_WEBHOOK_SECRET`              | **Requerido**                      | **Requerido** (como secreto)                                               | Secreto para verificar webhooks (`whsec_...`).                             |
-| `CREATOR_MONTHLY`, `PRO_ANNUAL` etc. | **Requerido**                      | **Requerido**                                                              | IDs de Precios de Stripe.                                                  |
+| Variable                             | Entorno       | Tipo en Cloud Run | Descripción                                             |
+| ------------------------------------ | ------------- | ----------------- | ------------------------------------------------------- |
+| `NEXT_PUBLIC_FIREBASE_API_KEY`       | Local/Prod    | **Secreto**       | Clave de API pública de Firebase (delante)              |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID`    | Local/Prod    | Texto plano       | ID del proyecto de Firebase (para cliente y servidor)   |
+| `FIREBASE_STORAGE_BUCKET`            | Local/Prod    | Texto plano       | Bucket de Cloud Storage                                 |
+| `FIREBASE_CLIENT_EMAIL`              | **Local/Prod**| **Secreto**       | Email de la cuenta de servicio del Admin SDK            |
+| `FIREBASE_PRIVATE_KEY`               | **Local/Prod**| **Secreto**       | Clave privada de la cuenta de servicio del Admin SDK    |
+| `NEXT_PUBLIC_BASE_URL`               | Local/Prod    | Texto plano       | URL pública de la app (para enlaces, etc.)              |
+| `JWT_SECRET`                         | Local/Prod    | **Secreto**       | Clave para firmar tokens de enlaces                     |
+| `RESEND_API_KEY`                     | Local/Prod    | **Secreto**       | Clave de API de Resend para enviar correos              |
+| `EMAIL_FROM`                         | Local/Prod    | Texto plano       | Remitente de correo por defecto                         |
+| `STRIPE_SECRET_KEY`                  | Local/Prod    | **Secreto**       | Clave secreta de Stripe                                 |
+| `STRIPE_WEBHOOK_SECRET`              | Local/Prod    | **Secreto**       | Secreto para verificar webhooks (`whsec_...`)           |
+| `CREATOR_MONTHLY`, `PRO_ANNUAL` etc. | Local/Prod    | Texto plano       | IDs de Precios de Stripe                                |
 
 ---
 
@@ -143,7 +176,7 @@ git clone https://github.com/ferangarita01/MuWise.git
 cd MuWise
 npm install
 
-# Configura .env.local con las variables anteriores para desarrollo local
+# Configura .env.local con las variables anteriores
 npm run dev
 ```
 
@@ -153,9 +186,9 @@ npm run dev
 
 MuWise está preparado para Firebase App Hosting.
 
-- **No** incluyas las variables de Firebase Admin SDK (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`) en `apphosting.yaml`. App Hosting usará ADC.
+- Revisa `apphosting.yaml` para asegurar que enlaza a los secretos correctos.
 - Despliega desde Firebase Console o usando la CLI de Firebase.
-- Protege tus secretos de aplicación (Stripe, JWT, etc.) en Google Secret Manager y referéncialos en `apphosting.yaml`.
+- Protege tus secretos (`FIREBASE_PRIVATE_KEY`, `FIREBASE_CLIENT_EMAIL`, etc.) en Google Secret Manager.
 
 ---
 
