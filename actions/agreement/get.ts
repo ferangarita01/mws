@@ -30,7 +30,10 @@ interface GetAgreementsResult {
 }
 
 export async function getAgreementsForUser(): Promise<GetAgreementsResult> {
-    const sessionCookie = cookies().get('session')?.value;
+    // ⚠️ En Next.js 15 cookies() es async → usar await
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('session')?.value;
+
     if (!sessionCookie) {
         console.log("getAgreementsForUser: No session cookie found. User is not authenticated.");
         return { status: 'error', message: 'User not authenticated.' };
@@ -45,10 +48,12 @@ export async function getAgreementsForUser(): Promise<GetAgreementsResult> {
         }
         
         // Query for agreements where the user is a signer
-        const signedAgreementsQuery = adminDb.collection('agreements').where('signerEmails', 'array-contains', userEmail);
+        const signedAgreementsQuery = adminDb.collection('agreements')
+            .where('signerEmails', 'array-contains', userEmail);
         
         // Query for agreements where the user is the creator
-        const createdAgreementsQuery = adminDb.collection('agreements').where('userId', '==', userId);
+        const createdAgreementsQuery = adminDb.collection('agreements')
+            .where('userId', '==', userId);
 
         const [signedSnapshot, createdSnapshot] = await Promise.all([
             signedAgreementsQuery.get(),

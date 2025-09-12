@@ -3,7 +3,6 @@
 // ================================================
 
 // ===== SIGNER =====
-// Represents a person who needs to sign a document.
 export interface Signer {
   id: string;
   name: string;
@@ -14,7 +13,6 @@ export interface Signer {
   signature?: string; // Data URL of the signature image
 }
 
-
 // ===== USUARIO =====
 export interface User {
   uid: string;
@@ -24,12 +22,12 @@ export interface User {
   photoURL?: string;
   
   // Campos profesionales de la industria musical
-  artistName?: string;       // Nombre artístico
-  primaryRole?: string;      // "Composer", "Producer", etc.
-  genres?: string[] | string; // ["Pop", "Electronic", "Hip-Hop"] or "Pop, Electronic"
-  publisher?: string;        // Editorial musical
+  artistName?: string;
+  primaryRole?: string;
+  genres?: string[] | string;
+  publisher?: string;
   proSociety?: 'none' | 'ascap' | 'bmi' | 'sesac' | 'other';
-  ipiNumber?: string;        // International Publishers Index
+  ipiNumber?: string;
   phone?: string;
   locationCountry?: string;
   locationState?: string;
@@ -37,24 +35,17 @@ export interface User {
   experienceLevel?: 'beginner' | 'intermediate' | 'professional';
   bio?: string;
   website?: string;
+
+  // Integración con Stripe
   stripeCustomerId?: string;
   stripePriceId?: string;
   stripeSubscriptionId?: string;
   stripeSubscriptionStatus?: string;
-  planId?: 'free' | 'creator' | 'pro'; // ID del plan del usuario
-  agreementCount?: number; // Contador de acuerdos
-};
-
-// ===== AGREEMENT =====
-export interface Agreement {
-  id: string;
-  name: string;
-  status: string; // Example status
-  songTitle: string;
-  userId: string; // Add userId to the agreement
+  planId?: 'free' | 'creator' | 'pro';
+  agreementCount?: number;
 }
 
-// ===== COMPOSER (in an agreement) =====
+// ===== COMPOSER (colaborador en un acuerdo) =====
 export interface Composer {
   id: string;
   name: string;
@@ -64,9 +55,9 @@ export interface Composer {
   publisher: string;
   ipiNumber: string;
   isRegisteredUser: boolean;
-  documentId: string; // ID for ID document
-  signature?: string; // Data URL of the signature image
-  signedAt?: string; // ISO date string
+  documentId: string;
+  signature?: string;
+  signedAt?: string;
 }
 
 // ===== AGREEMENT =====
@@ -74,53 +65,52 @@ export type AgreementStatus = 'draft' | 'pending' | 'signed' | 'archived';
 
 export interface Agreement {
   id: string;
+  name?: string; // opcional, algunos acuerdos pueden no tener "name"
   songTitle: string;
   composers: Composer[];
-  publicationDate: string; // ISO date string
-  createdAt: string; // ISO date string
-  lastModified: string; // ISO date string
-  status: AgreementStatus;
-  ownerId: string; // UID of the user who created it
-  // Additional metadata
+  publicationDate?: string;
+  createdAt: string;
+  lastModified: string;
+  status: AgreementStatus; // ✅ unificado
+  ownerId: string;
   isrc?: string;
   iswc?: string;
+  signers?: Signer[];
 }
 
-
-// ===== CONTRACT / TEMPLATE (for library view) =====
+// ===== CONTRACT / TEMPLATE (para librería) =====
 export type ContractStatus = "Gratis" | "Pro" | "Completado" | "Borrador" | "Pendiente";
+
 export interface Contract {
-    id: string;
-    title: string;
-    tags: string;
-    category: string;
-    type: "Plantilla" | "Contrato";
-    status: ContractStatus;
-    mins?: string;
-    filetypes?: string;
-    verified?: boolean;
-    image: string;
-    desc: string;
-    shortDesc: string;
-    content?: string; // <-- NUEVO CAMPO PARA EL CUERPO DEL ACUERDO
-    userId?: string;
-    signers?: Signer[];
-    createdAt: string;
-    lastModified?: string;
-    pdfUrl?: string; // <-- AÑADIDO PARA GUARDAR LA URL DEL PDF
-};
+  id: string;
+  title: string;
+  tags: string;
+  category: string;
+  type: "Plantilla" | "Contrato";
+  status: ContractStatus;
+  mins?: string;
+  filetypes?: string;
+  verified?: boolean;
+  image: string;
+  desc: string;
+  shortDesc: string;
+  content?: string; 
+  userId?: string;
+  signers?: Signer[];
+  createdAt: string;
+  lastModified?: string;
+  pdfUrl?: string;
+}
 
 // ================================================
 // TIPOS DE UTILIDAD
 // ================================================
 
-// ===== CREDENCIALES DE AUTENTICACIÓN =====
 export type EmailPasswordCredentials = {
   email: string;
   password: string;
 };
 
-// ===== DETALLES DE REGISTRO =====
 export type SignUpDetails = {
   fullName: string;
   email: string;
@@ -133,7 +123,6 @@ export type SignUpDetails = {
   ipiNumber?: string;
 };
 
-// ===== ESTADO DE ACCIÓN =====
 export type ActionState = {
   status: 'idle' | 'success' | 'error';
   message: string;
@@ -141,10 +130,9 @@ export type ActionState = {
 };
 
 // ================================================
-// FUNCIONES DE VALIDACIÓN (OPCIONAL)
+// VALIDADORES (UTILIDAD)
 // ================================================
 
-// ===== VALIDADORES =====
 export const isValidUser = (data: any): data is User => {
   return typeof data === 'object' &&
          typeof data.uid === 'string' &&
@@ -153,18 +141,18 @@ export const isValidUser = (data: any): data is User => {
          typeof data.createdAt === 'string';
 };
 
-export const isValidAgreement = (data: any): data is Agreement => {
-    return typeof data === 'object' &&
-           typeof data.id === 'string' &&
-           typeof data.songTitle === 'string' &&
-           Array.isArray(data.composers) &&
-           data.composers.every(isValidComposer);
+export const isValidComposer = (data: any): data is Composer => {
+  return typeof data === 'object' &&
+         typeof data.id === 'string' &&
+         typeof data.name === 'string' &&
+         typeof data.role === 'string' &&
+         typeof data.share === 'number';
 };
 
-export const isValidComposer = (data: any): data is Composer => {
-    return typeof data === 'object' &&
-           typeof data.id === 'string' &&
-           typeof data.name === 'string' &&
-           typeof data.role === 'string' &&
-           typeof data.share === 'number';
+export const isValidAgreement = (data: any): data is Agreement => {
+  return typeof data === 'object' &&
+         typeof data.id === 'string' &&
+         typeof data.songTitle === 'string' &&
+         Array.isArray(data.composers) &&
+         data.composers.every(isValidComposer);
 };
